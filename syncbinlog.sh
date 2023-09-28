@@ -164,7 +164,7 @@ log "Backup destination: $BACKUP_DIR"
 log "Log destination: $LOG_DIR"
 log "Reading mysql client configuration from $MYSQL_CONFIG_FILE"
 
-BINLOG_BASENAME=$(mysql --defaults-extra-file=${MYSQL_CONFIG_FILE} -Bse "SHOW GLOBAL VARIABLES LIKE 'log_bin_basename'")
+MYSQL_VERSION=$(mysql --defaults-extra-file=${MYSQL_CONFIG_FILE} -Bse "SELECT version();")
 if [[ $? -eq "1" ]]; then
     log "Please, check your mysql credentials" "ERROR"
     exit 1
@@ -174,12 +174,6 @@ ${COMPRESS} == true && log "Compression enabled"
 
 BINLOG_BASENAME=$(basename `echo ${BINLOG_BASENAME} | tail -1 | awk '{ print $2 }'`)
 log "Binlog file basename is $BINLOG_BASENAME"
-
-BINLOG_INDEX_FILE=`mysql --defaults-extra-file=${MYSQL_CONFIG_FILE} -Bse "SHOW GLOBAL VARIABLES LIKE 'log_bin_index'" | tail -1 | awk '{ print $2 }'`
-log "Binlog index file is $BINLOG_BASENAME"
-
-BINLOG_LAST_FILE=`tail -1 "$BINLOG_INDEX_FILE"`
-log "Most recent binlog file is $BINLOG_LAST_FILE"
 
 while :
 do
@@ -213,12 +207,8 @@ do
 
     if [[ -z ${LAST_BACKUP_FILE} ]]; then
         log "No backup file found, starting from oldest binary log in the server"
-
-        # If there is no backup yet, find the first binlog file to start copying
-        BINLOG_START_FILE=`head -n 1 "$BINLOG_INDEX_FILE"`
-        log "The oldest binlog file is ${BINLOG_START_FILE}"
-
-        BINLOG_SYNC_FILE_NAME=`basename "${BINLOG_START_FILE}"`
+        BINLOG_SYNC_FILE_NAME=`mysql --defaults-extra-file=${MYSQL_CONFIG_FILE} -Bse 'SHOW BINARY LOGS;' | awk '{ print $1 }' | head -n 1`
+        log "The oldest binlog file is ${BINLOG_SYNC_FILE_NAME}"
     else
         # If mysqlbinlog crashes/exits in the middle of execution, we cant know the last position reliably.
         # Thats why restart syncing from the beginning of the same binlog file
